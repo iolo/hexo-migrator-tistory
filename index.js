@@ -2,19 +2,17 @@ var xml2js = require('xml2js'),
   async = require('async'),
   tomd = require('to-markdown').toMarkdown,
   request = require('request'),
+  moment = require('moment'),
+  fs = require('fs'),
   util = hexo.util,
   file = util.file2;
 
-var captialize = function(str){
-  return str[0].toUpperCase() + str.substring(1);
-};
-
-hexo.extend.migrator.register('wordpress', function(args, callback){
+hexo.extend.migrator.register('tistory', function(args, callback){
   var source = args._.shift();
 
   if (!source){
     var help = [
-      'Usage: hexo migrate wordpress <source>',
+      'Usage: hexo migrate tistory <source>',
       '',
       'For more help, you can check the docs: http://hexo.io/docs/migration.html'
     ];
@@ -46,60 +44,66 @@ hexo.extend.migrator.register('wordpress', function(args, callback){
     function(xml, next){
       var count = 0;
 
-      async.each(xml.rss.channel[0].item, function(item, next){
-        if (!item['wp:post_type']){
-          return next();
-        }
+      async.each(xml.blog.post, function(item, next){
+        var
+          slug = item.$.slogan,
+          title = item.title && item.title[0],
+          // tistory use unix timestamp(in sec)
+          date = moment.unix(item.published || item.modified || item.created),
+          // tistory support single category for a post
+          category = item.category && item.category[0],
+          tags = item.tag,
+          // TODO: replace tistory inline attachment into markdown
+          content = tomd(item.content[0]);
 
-        var title = item.title[0],
-          id = item['wp:post_id'][0],
-          date = item['wp:post_date'][0],
-          slug = item['wp:post_name'][0],
-          content = item['content:encoded'][0],
-          comment = item['wp:comment_status'][0],
-          status = item['wp:status'][0],
-          type = item['wp:post_type'][0],
-          categories = [],
-          tags = [];
-
-        if (!title && !slug) return next();
-        if (type !== 'post' && type !== 'page') return next();
-        if (typeof content !== 'string') content = '';
-
-        content = tomd(content).replace(/\r\n/g, '\n');
-        count++;
-
-        if (item.category){
-          item.category.forEach(function(category, next){
-            var name = category._;
-
-            switch (category.$.domain){
-              case 'category':
-                categories.push(name);
-                break;
-
-              case 'post_tag':
-                tags.push(name);
-                break;
-            }
-          });
-        }
+        count += 1;
 
         var data = {
           title: title || slug,
-          id: +id,
-          date: date,
+          slug: slug,
+          date: moment(date).format(),
+          categories: category,
+          tags: item.tag,
           content: content,
-          layout: status === 'draft' ? 'draft' : 'post',
+          // tistory specific info
+          //t_author: item.author && { id: item.author[0]._, domain: item.author[0].$.domain },
+          //t_visibility: item.visibility && item.visibility[0],
+          //t_acceptComment: item.acceptComment && item.acceptComment[0],
+          //t_acceptTrackback: item.acceptTrackback && item.acceptTrackback[0],
+          //t_published: item.published && moment.unix(item.published[0]).format(),
+          //t_created: item.created && moment.unix(item.created[0]).format(),
+          //t_modified: item.modified && moment.unix(item.modified[0]).format(),
+          //t_password: item.password && item.password[0],
+          //t_location: item.location && item.location[0],
+          //t_isKorea: item.isKorea && item.isKorea[0],
+          //t_device: device,
+          //t_uselessMargin: uselessMargin,
+          t_id: item.id && item.id[0]
         };
 
-        if (type === 'page') data.layout = 'page';
-        if (slug) data.slug = slug;
-        if (comment === 'closed') data.comment = false;
-        if (categories.length && type === 'post') data.categories = categories;
-        if (tags.length && type === 'post') data.tags = tags;
+        // migrate post.visibility to layout
+        if (item.visibility && item.visibility[0] != 'public') {
+          data.layout = 'draft';
+        }
 
-        log.i('%s found: %s', captialize(type), title);
+        // TODO: migrate page...
+        // data.layout = 'page';
+
+        // XXX: migrate attachments...
+        if (item.attachment) {
+          data.attachments = item.attachment.map(function (att) {
+            // $: {size: .., width: ..., height: ...},
+            // label: [...],
+            // name: [...],
+            // content: [...]
+            var attpath = '/attachments/' + date.format('YYYY-MM-DD') + '-' + item.id + '-' + att.label[0];
+            fs.writeFileSync('source/' + attpath, new Buffer(att.content[0], 'base64'));
+            return '![' + att.label[0] + '](' + attpath + ')';
+          });
+        }
+
+        log.i('Post found: %s', data.title);
+        //console.log(data);next();
         post.create(data, next);
       }, function(err){
         if (err) return next(err);
