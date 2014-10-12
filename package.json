@@ -17,7 +17,7 @@
   ],
   "author": "Tommy Chen <tommy351@gmail.com> (http://zespia.tw)",
   "contributors": [
-      "Dongsu Jang <iolothebard@gmail.com> (http://iolo.kr)"
+    "Dongsu Jang <iolothebard@gmail.com> (http://iolo.kr)"
   ],
   "license": {
     "type": "MIT",
@@ -25,8 +25,9 @@
   },
   "dependencies": {
     "async": "^0.9.0",
-    "to-markdown": "0.0.1",
-    "xml2js": "0.4.2",
-    "request": "^2.36.0"
+    "moment": "^2.8.3",
+    "request": "^2.36.0",
+    "to-markdown": "^0.0.1",
+    "xml2js": "^0.4.2"
   }
 }

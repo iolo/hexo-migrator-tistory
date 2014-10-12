@@ -50,8 +50,7 @@ hexo.extend.migrator.register('tistory', function(args, callback){
           title = item.title && item.title[0],
           // tistory use unix timestamp(in sec)
           date = moment.unix(item.published || item.modified || item.created),
-          // tistory support single category for a post
-          category = item.category && item.category[0],
+          categories = String(item.category && item.category[0]).split('/'),
           tags = item.tag,
           // TODO: replace tistory inline attachment into markdown
           content = tomd(item.content[0]);
@@ -62,8 +61,8 @@ hexo.extend.migrator.register('tistory', function(args, callback){
           title: title || slug,
           slug: slug,
           date: moment(date).format(),
-          categories: category,
-          tags: item.tag,
+          categories: categories,
+          tags: tags,
           content: content,
           // tistory specific info
           //t_author: item.author && { id: item.author[0]._, domain: item.author[0].$.domain },
@@ -97,7 +96,7 @@ hexo.extend.migrator.register('tistory', function(args, callback){
             // name: [...],
             // content: [...]
             var attpath = '/attachments/' + date.format('YYYY-MM-DD') + '-' + item.id + '-' + att.label[0];
-            fs.writeFileSync('source/' + attpath, new Buffer(att.content[0], 'base64'));
+            fs.writeFileSync('source' + attpath, new Buffer(att.content[0], 'base64'));
             return '![' + att.label[0] + '](' + attpath + ')';
           });
         }
