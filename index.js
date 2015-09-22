@@ -1,11 +1,10 @@
 var xml2js = require('xml2js'),
   async = require('async'),
-  tomd = require('to-markdown').toMarkdown,
+  toMarkdown = require('to-markdown'),
   request = require('request'),
   moment = require('moment'),
   fs = require('fs'),
-  util = hexo.util,
-  file = util.file2;
+  file = require('fs');
 
 hexo.extend.migrator.register('tistory', function(args, callback){
   var source = args._.shift();
@@ -26,6 +25,13 @@ hexo.extend.migrator.register('tistory', function(args, callback){
 
   log.i('Analyzing %s...', source);
 
+  try {
+    fs.mkdirSync('source/_attachments');
+  } catch(e) {
+    //ignore!
+    //return callback(e);
+  }
+
   async.waterfall([
     function(next){
       // URL regular expression from: http://blog.mattheworiordan.com/post/13174566389/url-regular-expression-for-links-with-or-without-the
@@ -42,18 +48,20 @@ hexo.extend.migrator.register('tistory', function(args, callback){
       xml2js.parseString(content, next);
     },
     function(xml, next){
+      var setting = xml.blog.setting[0];
+      var tistoryUrl = 'http://' + (setting.secondaryDomain ? setting.secondaryDomain[0] : (setting.name[0] + '.tistory.com'));
       var count = 0;
 
       async.each(xml.blog.post, function(item, next){
         var
           slug = item.$.slogan,
-          title = item.title && item.title[0],
+          title = String(item.title && item.title[0]).replace(/"/g, '\''),
           // tistory use unix timestamp(in sec)
           date = moment.unix(item.published || item.modified || item.created),
-          categories = String(item.category && item.category[0]).split('/'),
+          categories = String(item.category && item.category[0]).split('/');
           tags = item.tag,
           // TODO: replace tistory inline attachment into markdown
-          content = tomd(item.content[0]);
+          content = toMarkdown(item.content[0], {gfm:true});
 
         count += 1;
 
@@ -77,7 +85,7 @@ hexo.extend.migrator.register('tistory', function(args, callback){
           //t_isKorea: item.isKorea && item.isKorea[0],
           //t_device: device,
           //t_uselessMargin: uselessMargin,
-          t_id: item.id && item.id[0]
+          tistorylink: tistoryUrl + (item.id && item.id[0])
         };
 
         // migrate post.visibility to layout
@@ -88,14 +96,15 @@ hexo.extend.migrator.register('tistory', function(args, callback){
         // TODO: migrate page...
         // data.layout = 'page';
 
-        // XXX: migrate attachments...
+        // migrate attachments...
+        // TODO: use asset folder
         if (item.attachment) {
           data.attachments = item.attachment.map(function (att) {
             // $: {size: .., width: ..., height: ...},
             // label: [...],
             // name: [...],
             // content: [...]
-            var attpath = '/attachments/' + date.format('YYYY-MM-DD') + '-' + item.id + '-' + att.label[0];
+            var attpath = '/_attachments/' + date.format('YYYY-MM-DD') + '-' + item.id + '-' + att.label[0];
             fs.writeFileSync('source' + attpath, new Buffer(att.content[0], 'base64'));
             return '![' + att.label[0] + '](' + attpath + ')';
           });
