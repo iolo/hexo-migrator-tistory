@@ -9,18 +9,21 @@ var
     toMarkdown = require('to-markdown');
 
 function slugize(str) {
-    return util.slugize(str, {tranform: 1});
+    return util.slugize(str, {transform: 1});
 }
 
-// XXX: hex has no api to get assetDir.
+// XXX: hexo has no api to escape file path
+// /A_B/C/D.EXT -> /a-b/c/d.ext
+function escapeFilePath(filePath) {
+    var ext = path.extname(filePath).toLowerCase();
+    return slugize(filePath.substring(0, filePath.length - ext.length)) + ext;
+}
+
+// XXX: hexo has no api to get assetDir.
 // see https://github.com/hexojs/hexo/blob/master/lib/hexo/post.js#L155
+// /a/b/c/d.md --> /a/b/c/d
 function getAssetDir(filePath) {
     return filePath.substring(0, filePath.length - path.extname(filePath).length);
-}
-
-function escapeFilePath(filePath) {
-    var ext = path.extname(filePath);
-    return slugize(path.basename(filePath, ext) + ext);
 }
 
 hexo.extend.migrator.register('tistory', function (args, callback) {
@@ -72,6 +75,9 @@ hexo.extend.migrator.register('tistory', function (args, callback) {
                 var tags = item.tag && item.tag.map(slugize);
                 var content = toMarkdown(item.content[0], {gfm: true});
 
+                // remove verbose html tags...
+                content = content.replace(/(<div>)|(<\/div>)|(<span>)|(<\/span>)/g, '');
+
                 // migrate tistory inline attachment into 'asset_img'
                 if (item.attachment) {
                     item.attachment.forEach(function (att) {
@@ -80,10 +86,12 @@ hexo.extend.migrator.register('tistory', function (args, callback) {
                             // TODO: more robust parser... for image grid, media player, ...
                             // [##_1C|cfile7.uf.2339543D543167771A3FF2.png|width="728" height="660" alt="HEXO+: Your Autonomous Aerial Camera - Drone" filename="home-hero-product-image.png" filemime="image/png"|HEXO+: Your Autonomous Aerial Camera - Drone_##]
                             var tistoryImg = new RegExp('\\[##_([^|]+)\\|' + util.escapeRegExp(att.name[0]) + '\\|width="(\\d+)"\\s+height="(\\d+)"\\s+([^|]*)\\|([^_]*)_##]');
-                            var assetImg = '{% asset_img ' + escapeFilePath(att.label[0]) + ' $2 $3 "$5" %}';
+                            var assetImg = ('{% asset_img ' + escapeFilePath(att.label[0]) + ' $2 $3 "$5" %}');
                             content = content.replace(tistoryImg, assetImg);
                         }
                     });
+                    // remove empty caption
+                    content = content.replace(/ "" %}/g, ' %}');
                 }
 
                 count += 1;
